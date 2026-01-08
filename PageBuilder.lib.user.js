@@ -2,7 +2,7 @@ var PageBuilder = (function () {
     
     function info (){
         const name = "PageBuilder.lib.user.js";
-        const version = "0.4.2";
+        const version = "0.5.0";
         const description = "A Simple Page builder for moodle.bbbaden.ch";
         const author = "PianoNic";
         const homepageURL = "";
@@ -28,37 +28,34 @@ var PageBuilder = (function () {
         }
     };
 
+    function ensureCustomContentExists() {
+        // Check if .custom-content already exists
+        var customContent = document.querySelector('.custom-content');
+        if (customContent) {
+            console.log('.custom-content already exists');
+            return customContent;
+        }
+        
+        // Get page-content
+        var pageContent = document.getElementById('page-content');
+        if (!pageContent) {
+            console.error('page-content element not found!');
+            return null;
+        }
+        
+        // Create .custom-content div
+        customContent = document.createElement('div');
+        customContent.className = 'custom-content';
+        customContent.style.padding = '20px';
+        pageContent.appendChild(customContent);
+        
+        console.log('.custom-content created successfully');
+        return customContent;
+    }
+
     function prepare404Page(title, headerText){
         console.log('prepare404Page called with title:', title);
         
-        // Wait for DOM to be ready
-        if (document.readyState === 'loading') {
-            console.log('DOM still loading, waiting...');
-            document.addEventListener('DOMContentLoaded', () => {
-                prepare404Page(title, headerText);
-            });
-            return;
-        }
-        
-        // Check if page is 404 (less strict check)
-        var keywordsMeta = document.querySelector('meta[name="keywords"]');
-        var is404Page = false;
-        
-        if (keywordsMeta) {
-            var keywordsContent = keywordsMeta.getAttribute('content');
-            is404Page = keywordsContent && keywordsContent.includes("404");
-        }
-        
-        // Also check if URL contains 'userscript' as a fallback
-        if (!is404Page && window.location.href.includes('/userscript/')) {
-            console.log('Detected userscript URL, treating as custom page');
-            is404Page = true;
-        }
-        
-        if (!is404Page) {
-            console.warn('Not a 404 page, but continuing anyway for userscript pages');
-        }
-
         // Change Website Title
         document.title = title;
     
@@ -68,6 +65,7 @@ var PageBuilder = (function () {
             var errorHeading = pageHeader.querySelector('h1.h2');
             if (errorHeading) {
                 errorHeading.innerHTML = headerText;
+                console.log('Page header updated');
             } else {
                 console.warn('Error heading not found in page-header');
             }
@@ -75,46 +73,39 @@ var PageBuilder = (function () {
             console.warn('page-header element not found');
         }
     
-        // Clear Page Content
+        // Clear and setup Page Content
         var pageContent = document.getElementById('page-content');
         if (pageContent) {
             pageContent.innerHTML = "";
-            
-            // Create custom-content div
-            var customContent = document.createElement('div');
-            customContent.className = 'custom-content';
-            customContent.style.padding = '20px';
-            pageContent.appendChild(customContent);
-            
-            console.log('Custom content div created successfully');
+            console.log('page-content cleared');
         } else {
             console.error('page-content element not found!');
+            return;
+        }
+        
+        // Create custom-content div
+        var customContent = ensureCustomContentExists();
+        if (customContent) {
+            console.log('Page prepared successfully');
+        } else {
+            console.error('Failed to create custom-content');
         }
     }
     
     function addExtensionInstallationTable() {
         console.log('addExtensionInstallationTable called');
         
-        // Make sure custom-content exists
-        var pageContent = document.querySelector('.custom-content');
+        // Ensure .custom-content exists
+        var pageContent = ensureCustomContentExists();
+        
         if (!pageContent) {
-            console.error('.custom-content element not found. Call prepare404Page first!');
-            // Try to create it as fallback
-            var pageContentDiv = document.getElementById('page-content');
-            if (pageContentDiv) {
-                pageContent = document.createElement('div');
-                pageContent.className = 'custom-content';
-                pageContent.style.padding = '20px';
-                pageContentDiv.appendChild(pageContent);
-                console.log('Created .custom-content as fallback');
-            } else {
-                console.error('Cannot create .custom-content - page-content not found');
-                return;
-            }
+            console.error('Cannot add table - custom-content could not be created');
+            return;
         }
 
         // Add loading indicator
-        pageContent.innerHTML = '<p class="alert alert-info">Loading extensions...</p>';
+        pageContent.innerHTML = '<div class="alert alert-info">Loading extensions...</div>';
+        console.log('Loading indicator added');
 
         // Fetch the table from the given URL
         fetch('https://raw.githubusercontent.com/BBBaden-Moodle-userscripts/BBBaden-Moodle/main/AllProjects.md')
@@ -128,8 +119,14 @@ var PageBuilder = (function () {
             .then(data => {
                 console.log('Fetched data length:', data.length);
                 
+                // Re-get pageContent in case it was modified
+                var customContent = document.querySelector('.custom-content');
+                if (!customContent) {
+                    throw new Error('.custom-content disappeared!');
+                }
+                
                 // Clear loading indicator
-                pageContent.innerHTML = '';
+                customContent.innerHTML = '';
                 
                 // Parse the markdown content into HTML
                 const parser = new DOMParser();
@@ -144,7 +141,7 @@ var PageBuilder = (function () {
                 // Set styles to make the table use the full width
                 table.style.width = '100%';
                 table.style.borderCollapse = 'collapse';
-                table.classList.add('table', 'table-striped');
+                table.classList.add('table', 'table-striped', 'table-bordered');
 
                 // Add space between each line (transparent border)
                 const tbody = table.querySelector('tbody');
@@ -159,7 +156,7 @@ var PageBuilder = (function () {
                 const headerRow = table.querySelector('thead tr');
                 if (headerRow) {
                     const statusHeader = document.createElement('th');
-                    statusHeader.textContent = 'Installed Status';
+                    statusHeader.textContent = 'Status';
                     headerRow.appendChild(statusHeader);
                 }
 
@@ -172,40 +169,38 @@ var PageBuilder = (function () {
                         const installLink = installCell.querySelector('a');
                         if (installLink) {
                             const href = installLink.href;
-                            installCell.innerHTML = '<a href="' + href + '"><button class="btn btn-outline-secondary btn-sm text-nowrap install-button">Install</button></a>';
+                            installCell.innerHTML = '<a href="' + href + '" target="_blank"><button class="btn btn-outline-primary btn-sm text-nowrap install-button">Install</button></a>';
                         }
                     }
 
-                    // Add "Installed Status" column with default value "Not Installed"
+                    // Add "Status" column with default value
                     const statusCell = document.createElement('td');
-                    statusCell.className = 'status-cell';
-                    statusCell.textContent = 'Not Installed';
+                    statusCell.className = 'status-cell text-center';
+                    statusCell.innerHTML = '<span class="badge badge-secondary">Not Installed</span>';
                     row.appendChild(statusCell);
                 });
 
                 // Append the table to the div
-                pageContent.appendChild(table);
+                customContent.appendChild(table);
                 console.log('Table appended successfully');
             })
             .catch(error => {
                 console.error('Error fetching or appending table:', error);
-                pageContent.innerHTML = '<div class="alert alert-danger">Error loading extensions table: ' + error.message + '</div>';
+                var customContent = document.querySelector('.custom-content');
+                if (customContent) {
+                    customContent.innerHTML = '<div class="alert alert-danger"><strong>Error:</strong> ' + error.message + '</div>';
+                }
             });
     }
     
     function updateInstallationStatus(scriptName, scriptVersion) {
-        console.log('Updating installation status for:', scriptName, scriptVersion);
+        console.log('Updating installation status for:', scriptName, 'v' + scriptVersion);
         
-        // Find the table row with the matching script name
-        var pageContent = document.querySelector('.custom-content');
-        if (!pageContent) {
-            console.error('.custom-content element not found');
-            return;
-        }
-        
-        var table = pageContent.querySelector('table');
+        // Find the table
+        var table = document.querySelector('.custom-content table');
         if (!table) {
-            console.warn('Table not found yet');
+            console.warn('Table not found yet, will retry...');
+            setTimeout(() => updateInstallationStatus(scriptName, scriptVersion), 500);
             return;
         }
         
@@ -216,20 +211,20 @@ var PageBuilder = (function () {
             var nameCell = row.querySelector('td:nth-child(2)');
             if (!nameCell) return;
             
-            var installedScriptName = nameCell.textContent.trim();
+            var tableName = nameCell.textContent.trim();
             
-            // Try to match by name (case-insensitive and flexible)
-            if (installedScriptName.toLowerCase().includes(scriptName.toLowerCase()) ||
-                scriptName.toLowerCase().includes(installedScriptName.toLowerCase())) {
+            // Try to match by name (flexible matching)
+            if (tableName.toLowerCase() === scriptName.toLowerCase() ||
+                tableName.toLowerCase().replace(/\s+/g, '') === scriptName.toLowerCase().replace(/\s+/g, '') ||
+                scriptName.toLowerCase().includes(tableName.toLowerCase()) ||
+                tableName.toLowerCase().includes(scriptName.toLowerCase())) {
                 
-                // Update the status cell with "Installed"
+                // Update the status cell
                 var statusCell = row.querySelector('.status-cell');
                 if (statusCell) {
-                    statusCell.textContent = 'Installed (v' + scriptVersion + ')';
-                    statusCell.style.color = 'green';
-                    statusCell.style.fontWeight = 'bold';
+                    statusCell.innerHTML = '<span class="badge badge-success">✓ Installed (v' + scriptVersion + ')</span>';
                     found = true;
-                    console.log('Updated status for:', scriptName);
+                    console.log('✓ Updated status for:', tableName);
                 }
             }
         });
@@ -244,5 +239,6 @@ var PageBuilder = (function () {
         prepare404Page: prepare404Page,
         addExtensionInstallationTable: addExtensionInstallationTable,
         updateInstallationStatus: updateInstallationStatus,
+        ensureCustomContentExists: ensureCustomContentExists,
     };
 })();
