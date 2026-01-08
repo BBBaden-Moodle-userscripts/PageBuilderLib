@@ -2,7 +2,7 @@ var PageBuilder = (function () {
     
     function info (){
         const name = "PageBuilder.lib.user.js";
-        const version = "0.5.0";
+        const version = "0.5.1";
         const description = "A Simple Page builder for moodle.bbbaden.ch";
         const author = "PianoNic";
         const homepageURL = "";
@@ -28,36 +28,29 @@ var PageBuilder = (function () {
         }
     };
 
-    function ensureCustomContentExists() {
-        // Check if .custom-content already exists
-        var customContent = document.querySelector('.custom-content');
-        if (customContent) {
-            console.log('.custom-content already exists');
-            return customContent;
-        }
-        
-        // Get page-content
-        var pageContent = document.getElementById('page-content');
-        if (!pageContent) {
-            console.error('page-content element not found!');
-            return null;
-        }
-        
-        // Create .custom-content div
-        customContent = document.createElement('div');
-        customContent.className = 'custom-content';
-        customContent.style.padding = '20px';
-        pageContent.appendChild(customContent);
-        
-        console.log('.custom-content created successfully');
-        return customContent;
-    }
-
     function prepare404Page(title, headerText){
-        console.log('prepare404Page called with title:', title);
+        console.log('prepare404Page: Starting with title:', title);
         
+        // Check for 404 page OR userscript pages
+        var is404 = false;
+        var keywordsMeta = document.querySelector('meta[name="keywords"]');
+        
+        if (keywordsMeta) {
+            var keywordsContent = keywordsMeta.getAttribute('content');
+            is404 = keywordsContent && keywordsContent.includes("404");
+        }
+        
+        // Also allow userscript pages
+        var isUserscriptPage = window.location.href.includes('/userscript/');
+        
+        if (!is404 && !isUserscriptPage) {
+            console.error("This function should only be called on 404 or userscript pages!");
+            return;
+        }
+
         // Change Website Title
         document.title = title;
+        console.log('prepare404Page: Title changed to:', title);
     
         // Change Page header
         var pageHeader = document.getElementById('page-header');
@@ -65,68 +58,62 @@ var PageBuilder = (function () {
             var errorHeading = pageHeader.querySelector('h1.h2');
             if (errorHeading) {
                 errorHeading.innerHTML = headerText;
-                console.log('Page header updated');
-            } else {
-                console.warn('Error heading not found in page-header');
+                console.log('prepare404Page: Header updated to:', headerText);
             }
-        } else {
-            console.warn('page-header element not found');
         }
     
-        // Clear and setup Page Content
+        // Clear Page Content
         var pageContent = document.getElementById('page-content');
-        if (pageContent) {
-            pageContent.innerHTML = "";
-            console.log('page-content cleared');
-        } else {
-            console.error('page-content element not found!');
+        if (!pageContent) {
+            console.error('prepare404Page: page-content element not found!');
             return;
         }
         
-        // Create custom-content div
-        var customContent = ensureCustomContentExists();
-        if (customContent) {
-            console.log('Page prepared successfully');
-        } else {
-            console.error('Failed to create custom-content');
-        }
+        pageContent.innerHTML = "";
+        console.log('prepare404Page: Page content cleared');
+        
+        // CREATE THE CUSTOM-CONTENT DIV!
+        var customContent = document.createElement('div');
+        customContent.className = 'custom-content';
+        customContent.style.padding = '20px';
+        pageContent.appendChild(customContent);
+        console.log('prepare404Page: custom-content div created and appended');
     }
     
     function addExtensionInstallationTable() {
-        console.log('addExtensionInstallationTable called');
+        console.log('addExtensionInstallationTable: Starting...');
         
-        // Ensure .custom-content exists
-        var pageContent = ensureCustomContentExists();
+        // Get custom-content element
+        var pageContent = document.getElementsByClassName('custom-content')[0];
         
         if (!pageContent) {
-            console.error('Cannot add table - custom-content could not be created');
+            console.error('addExtensionInstallationTable: .custom-content not found! Did you call prepare404Page first?');
             return;
         }
-
-        // Add loading indicator
+        
+        console.log('addExtensionInstallationTable: custom-content found, adding loading message...');
         pageContent.innerHTML = '<div class="alert alert-info">Loading extensions...</div>';
-        console.log('Loading indicator added');
 
         // Fetch the table from the given URL
         fetch('https://raw.githubusercontent.com/BBBaden-Moodle-userscripts/BBBaden-Moodle/main/AllProjects.md')
             .then(response => {
-                console.log('Fetch response status:', response.status);
+                console.log('addExtensionInstallationTable: Fetch response status:', response.status);
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    throw new Error('HTTP ' + response.status);
                 }
                 return response.text();
             })
             .then(data => {
-                console.log('Fetched data length:', data.length);
+                console.log('addExtensionInstallationTable: Data fetched, length:', data.length);
                 
-                // Re-get pageContent in case it was modified
-                var customContent = document.querySelector('.custom-content');
-                if (!customContent) {
+                // Re-get pageContent in case anything changed
+                var pageContent = document.getElementsByClassName('custom-content')[0];
+                if (!pageContent) {
                     throw new Error('.custom-content disappeared!');
                 }
                 
-                // Clear loading indicator
-                customContent.innerHTML = '';
+                // Clear loading message
+                pageContent.innerHTML = '';
                 
                 // Parse the markdown content into HTML
                 const parser = new DOMParser();
@@ -135,7 +122,7 @@ var PageBuilder = (function () {
                 // Extract the table
                 const table = doc.querySelector('table');
                 if (!table) {
-                    throw new Error('Table not found in fetched content');
+                    throw new Error('Table not found in markdown');
                 }
 
                 // Set styles to make the table use the full width
@@ -155,21 +142,21 @@ var PageBuilder = (function () {
                 // Add new column header
                 const headerRow = table.querySelector('thead tr');
                 if (headerRow) {
-                    const statusHeader = document.createElement('th');
-                    statusHeader.textContent = 'Status';
-                    headerRow.appendChild(statusHeader);
+                    const th = document.createElement('th');
+                    th.textContent = 'Status';
+                    headerRow.appendChild(th);
                 }
 
                 // Process body rows
                 const bodyRows = table.querySelectorAll('tbody tr');
                 bodyRows.forEach(row => {
                     // Convert all "Install" links to buttons
-                    const installCell = row.querySelector('td:last-child');
-                    if (installCell) {
-                        const installLink = installCell.querySelector('a');
+                    const lastCell = row.querySelector('td:last-child');
+                    if (lastCell) {
+                        const installLink = lastCell.querySelector('a');
                         if (installLink) {
                             const href = installLink.href;
-                            installCell.innerHTML = '<a href="' + href + '" target="_blank"><button class="btn btn-outline-primary btn-sm text-nowrap install-button">Install</button></a>';
+                            lastCell.innerHTML = '<a href="' + href + '" target="_blank"><button class="btn btn-outline-primary btn-sm text-nowrap install-button">Install</button></a>';
                         }
                     }
 
@@ -181,26 +168,25 @@ var PageBuilder = (function () {
                 });
 
                 // Append the table to the div
-                customContent.appendChild(table);
-                console.log('Table appended successfully');
+                pageContent.appendChild(table);
+                console.log('addExtensionInstallationTable: Table added successfully!');
             })
             .catch(error => {
-                console.error('Error fetching or appending table:', error);
-                var customContent = document.querySelector('.custom-content');
-                if (customContent) {
-                    customContent.innerHTML = '<div class="alert alert-danger"><strong>Error:</strong> ' + error.message + '</div>';
+                console.error('addExtensionInstallationTable: Error:', error);
+                var pageContent = document.getElementsByClassName('custom-content')[0];
+                if (pageContent) {
+                    pageContent.innerHTML = '<div class="alert alert-danger"><strong>Error:</strong> ' + error.message + '</div>';
                 }
             });
     }
     
     function updateInstallationStatus(scriptName, scriptVersion) {
-        console.log('Updating installation status for:', scriptName, 'v' + scriptVersion);
+        console.log('updateInstallationStatus: Updating', scriptName, 'v' + scriptVersion);
         
         // Find the table
         var table = document.querySelector('.custom-content table');
         if (!table) {
-            console.warn('Table not found yet, will retry...');
-            setTimeout(() => updateInstallationStatus(scriptName, scriptVersion), 500);
+            console.warn('updateInstallationStatus: Table not found yet');
             return;
         }
         
@@ -213,24 +199,23 @@ var PageBuilder = (function () {
             
             var tableName = nameCell.textContent.trim();
             
-            // Try to match by name (flexible matching)
+            // Flexible matching
             if (tableName.toLowerCase() === scriptName.toLowerCase() ||
                 tableName.toLowerCase().replace(/\s+/g, '') === scriptName.toLowerCase().replace(/\s+/g, '') ||
                 scriptName.toLowerCase().includes(tableName.toLowerCase()) ||
                 tableName.toLowerCase().includes(scriptName.toLowerCase())) {
                 
-                // Update the status cell
                 var statusCell = row.querySelector('.status-cell');
                 if (statusCell) {
                     statusCell.innerHTML = '<span class="badge badge-success">✓ Installed (v' + scriptVersion + ')</span>';
                     found = true;
-                    console.log('✓ Updated status for:', tableName);
+                    console.log('updateInstallationStatus: Updated', tableName);
                 }
             }
         });
         
         if (!found) {
-            console.log('Script not found in table:', scriptName);
+            console.log('updateInstallationStatus: Script not found in table:', scriptName);
         }
     }
     
@@ -239,6 +224,5 @@ var PageBuilder = (function () {
         prepare404Page: prepare404Page,
         addExtensionInstallationTable: addExtensionInstallationTable,
         updateInstallationStatus: updateInstallationStatus,
-        ensureCustomContentExists: ensureCustomContentExists,
     };
 })();
